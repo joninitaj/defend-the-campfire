@@ -1,35 +1,24 @@
 html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
-    background: #081008; overflow: hidden;
+    background: #000; overflow: hidden;
     font-family: "Courier New", Courier, monospace; color: #e8d8b0;
     user-select: none;
+    touch-action: none;
   }
   #wrap {
     position: fixed; inset: 0;
     width: 100vw; height: 100vh;
     width: 100dvw; height: 100dvh;
-    display: flex; background: #000;
-  }
-  .ad-rail {
-    display: none; flex: none;
-    width: 160px; height: 100%;
+    display: flex; align-items: stretch; justify-content: stretch;
     background: #000;
-    align-items: center; justify-content: center;
-    pointer-events: auto;
   }
-  .ad-rail.show { display: flex; }
-  .ad-rail.wide { width: 300px; }
-  .ad-rail > div {
-    width: 160px; height: 600px; overflow: hidden;
-    background: #12100c; border: 1px solid #3a3020;
-    color: #6a5a40; display: flex; align-items: center; justify-content: center;
-    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
-  }
-  .ad-rail.wide > div { width: 300px; height: 600px; }
-  .ad-rail > div:empty::after { content: "Ad"; }
   #stage {
-    position: relative; flex: 1; min-width: 0; height: 100%;
+    position: relative; flex: 1; min-width: 0; min-height: 0;
+    width: 100%; height: 100%;
     background: #081008;
+    container-type: size;
+    container-name: stage;
+    overflow: hidden;
   }
   canvas#g, #g {
     display: block; position: absolute; inset: 0;
@@ -63,7 +52,7 @@ html, body {
   .chip {
     font-size: 11px; padding: 3px 7px 3px 4px; border: 2px solid #3a3020;
     background: #0c0b09; color: #ffe27a; letter-spacing: 0.04em;
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   }
   .chip.camp { color: #ffb020; }
   .chip canvas {
@@ -74,18 +63,21 @@ html, body {
     position: absolute; left: 50%; top: 92px; transform: translateX(-50%);
     font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase;
     color: #ffe27a; opacity: 0; transition: opacity 0.2s;
+    text-align: center; width: 88%; pointer-events: none;
   }
   .overlay {
     position: absolute; inset: 0; display: none; pointer-events: auto;
     background: rgba(12, 11, 9, 0.84); align-items: center; justify-content: center;
-    flex-direction: column; gap: 14px;
+    flex-direction: column; gap: 14px; padding: 18px 16px; box-sizing: border-box;
+    z-index: 6;
   }
   .overlay.show { display: flex; }
-  .overlay h1 { margin: 0; font-size: 42px; letter-spacing: 0.14em; color: #ffb020; font-weight: 700; }
-  .overlay h2 { margin: 0; font-size: 26px; letter-spacing: 0.1em; color: #fff3c8; }
+  .overlay h1 { margin: 0; font-size: 42px; letter-spacing: 0.14em; color: #ffb020; font-weight: 700; text-align: center; }
+  .overlay h2 { margin: 0; font-size: 26px; letter-spacing: 0.1em; color: #fff3c8; text-align: center; }
   .overlay p { margin: 0; color: #a89880; font-size: 15px; line-height: 1.5; text-align: center; max-width: 640px; }
   .hint { font-size: 13px; color: #c8b890; letter-spacing: 0.08em; }
   .k { color: #ffb020; }
+  .touch-hint, .touch-only { display: none; }
   #cards, #campCards {
     display: grid; grid-template-columns: repeat(3, minmax(200px, 240px)); gap: 12px;
     pointer-events: auto; margin-top: 6px;
@@ -98,7 +90,7 @@ html, body {
   .card .key { font-size: 11px; color: #ffb020; letter-spacing: 0.16em; }
   .card h3 { margin: 6px 0 4px; font-size: 16px; color: #fff3c8; letter-spacing: 0.04em; }
   .card .lvl { font-size: 11px; color: #7a9a62; letter-spacing: 0.1em; }
-  .card p { margin: 6px 0 0; font-size: 12px; color: #a89880; text-align: left; }
+  .card p { margin: 6px 0 0; font-size: 12px; color: #a89880; text-align: left; max-width: none; }
   .ico {
     width: 52px; height: 52px; margin: 8px 0 4px;
     border: 2px solid #3a3020; background: #0c0b09;
@@ -106,11 +98,130 @@ html, body {
     display: block; position: static;
   }
   .muted { position: absolute; right: 18px; bottom: 16px; font-size: 12px; letter-spacing: 0.14em; color: #c23a2a; display: none; }
+  #touch {
+    display: none; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  }
+  body.is-touch.playing #touch { display: block; }
+  #stickBase {
+    position: absolute;
+    left: max(16px, env(safe-area-inset-left));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    width: 128px; height: 128px; border-radius: 50%;
+    border: 2px solid rgba(255, 176, 32, 0.45);
+    background: rgba(12, 11, 9, 0.38);
+    pointer-events: auto; touch-action: none;
+  }
+  #stickKnob {
+    position: absolute; left: 50%; top: 50%;
+    width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    border-radius: 50%; background: rgba(255, 176, 32, 0.82);
+    border: 2px solid #fff3c8; pointer-events: none;
+    will-change: transform;
+  }
+  #dashBtn {
+    position: absolute;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(24px, env(safe-area-inset-bottom));
+    width: 86px; height: 86px; border-radius: 50%;
+    pointer-events: auto; touch-action: none; cursor: pointer;
+    background: rgba(22, 18, 14, 0.72); border: 2px solid #ffb020;
+    color: #fff3c8; font-family: inherit; font-size: 13px; letter-spacing: 0.12em;
+  }
+  #dashBtn:active { background: #1e1810; }
+  #adWait, #adBreak { z-index: 8; }
+  .adActions {
+    display: flex; flex-direction: column; gap: 10px; width: min(92%, 340px);
+    pointer-events: auto;
+  }
   .adBtn {
-    pointer-events: auto; cursor: pointer; margin-top: 6px;
+    pointer-events: auto; cursor: pointer; margin: 0;
     background: #16120e; border: 2px solid #ffb020; color: #fff3c8;
-    font-family: inherit; font-size: 14px; letter-spacing: 0.08em;
-    padding: 10px 16px;
+    font-family: inherit; font-size: 14px; letter-spacing: 0.06em;
+    padding: 12px 14px; width: 100%; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   }
   .adBtn:hover, .adBtn:focus { background: #1e1810; outline: none; }
-  .adBtn[hidden] { display: none; }
+  .adBtn[hidden], .adBtn:disabled { display: none; }
+  .adIco {
+    width: 16px; height: 12px; flex: none;
+    border: 2px solid #ffb020; position: relative; box-sizing: border-box;
+  }
+  .adIco::after {
+    content: ""; position: absolute; left: 4px; top: 1px;
+    border-style: solid; border-width: 4px 0 4px 7px;
+    border-color: transparent transparent transparent #ffb020;
+  }
+  .spin {
+    width: 28px; height: 28px; border: 3px solid #3a3020;
+    border-top-color: #ffb020; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Phone / narrow stage: keep HUD to a thin strip so the arena stays visible. */
+  @container stage (max-width: 860px) {
+    #hud {
+      left: 8px; right: 8px; top: 8px; gap: 6px;
+      flex-wrap: wrap;
+    }
+    .col { min-width: 0; flex: 1 1 140px; gap: 4px; }
+    .col.left, .col.right {
+      padding: 6px 8px;
+      background: rgba(22, 18, 14, 0.82);
+    }
+    .label { font-size: 10px; letter-spacing: 0.08em; }
+    .val { font-size: 14px; }
+    .bar { width: 100%; max-width: none; height: 7px; }
+    .chips, .camp-chips {
+      max-width: 100%; flex-wrap: nowrap; overflow-x: auto;
+      justify-content: flex-start; margin-top: 2px;
+      scrollbar-width: none;
+    }
+    .chips::-webkit-scrollbar, .camp-chips::-webkit-scrollbar { display: none; }
+    .chip { font-size: 10px; padding: 2px 5px 2px 2px; gap: 4px; }
+    .chip canvas { width: 16px; height: 16px; }
+    #banner { top: 18%; font-size: 16px; }
+    .overlay {
+      gap: 10px;
+      padding: max(10px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom));
+    }
+    .overlay h1 { font-size: clamp(22px, 8vw, 32px); letter-spacing: 0.08em; }
+    .overlay h2 { font-size: 20px; }
+    .overlay p { font-size: 13px; max-width: 94%; }
+    #cards, #campCards {
+      display: flex; flex-direction: column; gap: 8px;
+      width: min(100%, 420px); max-height: 58%; overflow-y: auto;
+    }
+    .card {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      grid-template-rows: auto auto auto auto;
+      column-gap: 10px; padding: 10px;
+    }
+    .card .key { grid-column: 2; }
+    .card .ico {
+      grid-column: 1; grid-row: 1 / span 4;
+      width: 44px; height: 44px; margin: 0;
+    }
+    .card h3 { grid-column: 2; margin: 0; font-size: 14px; }
+    .card .lvl { grid-column: 2; }
+    .card p { grid-column: 2; margin: 4px 0 0; }
+  }
+
+  body.is-touch .desk-hint { display: none; }
+  body.is-touch .touch-hint, body.is-touch .touch-only { display: flex; }
+  body.is-touch p.touch-hint { display: block; }
+  body.is-touch .card .key { display: none; }
+  body.is-touch .muted { bottom: 118px; right: 16px; }
+  body.is-touch.playing .muted { bottom: 118px; }
+  body.is-touch .adBtn, body.is-touch .card { min-height: 44px; }
+
+  @container stage (max-width: 860px) and (max-height: 520px) {
+    #hud { top: 6px; }
+    .col.left .label:not(.warn) { display: none; }
+    .camp-chips { display: none; }
+    #stickBase { width: 96px; height: 96px; }
+    #stickKnob { width: 42px; height: 42px; margin: -21px 0 0 -21px; }
+    #dashBtn { width: 68px; height: 68px; font-size: 11px; bottom: max(12px, env(safe-area-inset-bottom)); }
+    #cards, #campCards { max-height: 62%; }
+  }

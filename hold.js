@@ -6,6 +6,7 @@
   const CAMP = { x: 1600, y: 1600, r: 240 };
   const MAX_Z = 40, MAX_SHOTS = 90, MAX_PARTS = 140, TREE_CELL = 192;
   const KEY = Object.create(null);
+  const stick = { id: null, nx: 0, ny: 0 };
   const $ = (id) => document.getElementById(id);
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -56,8 +57,7 @@
     ready: false,
     playing: false,
     video: false,
-    rails: false,
-    bannerAt: 0,
+    blocked: false,
     lastPct: 0,
     demoTimer: 0,
     demoDone: null,
@@ -111,130 +111,76 @@
         if (s.game.reportGameCompletedPercentage) s.game.reportGameCompletedPercentage(n);
       });
     },
-    layoutRails() {
-      const w = window.innerWidth | 0, h = window.innerHeight | 0;
-      const wide = w >= 1800 && h >= 620;
-      const show = w >= 1100 && h >= 600;
-      const left = $("adLeft"), right = $("adRight");
-      [left, right].forEach((el) => {
-        if (!el) return;
-        el.classList.toggle("show", show);
-        el.classList.toggle("wide", wide);
-        el.setAttribute("aria-hidden", show ? "false" : "true");
-      });
-      this.rails = show;
-      if (show) setTimeout(() => this.requestBanners(), 80);
-      else this.clearBanners();
-      return show;
-    },
-    async requestBanners() {
-      if (this.video || !this.rails) return;
-      if (!this.ok()) return;
-      if (Date.now() - this.bannerAt < 31000) return;
-      const s = this.sdk();
-      if (!s || !s.banner || !s.banner.requestResponsiveBanner) return;
-      const ids = ["adLeftInner", "adRightInner"];
-      let filled = false;
-      for (const id of ids) {
-        try {
-          await s.banner.requestResponsiveBanner(id);
-          filled = true;
-        } catch (e) {}
-      }
-      if (filled) this.bannerAt = Date.now();
-    },
-    clearBanners() {
-      this.call((s) => {
-        if (!s.banner) return;
-        if (s.banner.clearBanner) {
-          s.banner.clearBanner("adLeftInner");
-          s.banner.clearBanner("adRightInner");
-        } else if (s.banner.clearAllBanners) s.banner.clearAllBanners();
-      });
+    wait(on) {
+      if (on) show("adWait");
+      else hide("adWait");
     },
     closeDemo() {
       if (this.demoTimer) { clearTimeout(this.demoTimer); this.demoTimer = 0; }
       hide("adBreak");
+      this.wait(false);
       const fn = this.demoDone;
       this.demoDone = null;
       this.video = false;
       audio.adMute = false;
       syncHudBars();
-      this.requestBanners();
       if (fn) fn();
     },
-    demoVideo(kind, done) {
+    demoVideo(done) {
       this.video = true;
+      this.wait(false);
       audio.adMute = true;
       syncHudBars();
       $("adBreakTitle").textContent = "Advertisement";
-      $("adBreakKind").textContent = kind === "rewarded" ? "Watch to respawn" : "Wave break";
+      $("adBreakKind").textContent = "Rewarded preview";
       show("adBreak");
       this.demoDone = done;
-      this.demoTimer = setTimeout(() => this.closeDemo(), kind === "rewarded" ? 2800 : 2200);
-    },
-    midgame(done) {
-      const finish = () => {
-        this.video = false;
-        audio.adMute = false;
-        syncHudBars();
-        this.requestBanners();
-        done();
-      };
-      this.video = true;
-      this.clearBanners();
-      if (!this.ok() || !this.sdk().ad) { this.demoVideo("midgame", done); return; }
-      let closed = false;
-      const end = (err) => {
-        if (closed) return;
-        closed = true;
-        const local = this.env() === "local";
-        if (local && err && err.code !== "adCooldown") this.demoVideo("midgame", done);
-        else finish();
-      };
-      try {
-        this.sdk().ad.requestAd("midgame", {
-          adStarted() { audio.adMute = true; syncHudBars(); },
-          adFinished() { end(null); },
-          adError(error) { end(error || { code: "other" }); }
-        });
-      } catch (e) { end({ code: "other" }); }
+      this.demoTimer = setTimeout(() => this.closeDemo(), 2800);
     },
     rewarded(onReward, onFail) {
-      const fail = () => {
+      const fail = (reason) => {
         this.video = false;
         audio.adMute = false;
+        this.wait(false);
         syncHudBars();
-        this.requestBanners();
-        if (onFail) onFail();
+        if (onFail) onFail(reason || "unavailable");
       };
+      if (this.blocked) { fail("adblock"); return; }
       this.video = true;
-      this.clearBanners();
+      this.wait(true);
       if (!this.ok() || !this.sdk().ad) {
-        this.demoVideo("rewarded", onReward);
+        this.demoVideo(onReward);
         return;
       }
       let closed = false;
       try {
         this.sdk().ad.requestAd("rewarded", {
-          adStarted() { audio.adMute = true; syncHudBars(); },
+          adStarted() {
+            audio.adMute = true;
+            cg.wait(false);
+            syncHudBars();
+          },
           adFinished() {
             if (closed) return;
             closed = true;
             cg.video = false;
             audio.adMute = false;
+            cg.wait(false);
             syncHudBars();
-            cg.requestBanners();
             onReward();
           },
-          adError() {
+          adError(error) {
             if (closed) return;
             closed = true;
-            if (cg.env() === "local") cg.demoVideo("rewarded", onReward);
-            else fail();
+            const code = (error && error.code) || "other";
+            if (cg.env() === "local" && code !== "adCooldown" && code !== "adblock") {
+              cg.demoVideo(onReward);
+              return;
+            }
+            fail(code);
           }
         });
-      } catch (e) { fail(); }
+      } catch (e) { fail("other"); }
     }
   };
 
@@ -423,15 +369,14 @@
       wave: 0, waveRest: 1.4, incoming: 0, kills: 0, held: false,
       zombies: [], shots: [], goo: [], parts: [], floaters: [], fx: [], pools: [],
       trees: [], tGrid: new Map(), crates: [], pickups: [], litter: [], picks: [], campPicks: [],
-      msg: "", msgT: 0
+      msg: "", msgT: 0, bonusLeft: 0, powerAdAt: 70 + Math.random() * 40, revived: false
     };
     buildWorld();
     S.camX = clamp(S.player.x - VW / 2, 0, Math.max(0, MAP - VW));
     S.camY = clamp(S.player.y - VH / 2, 0, Math.max(0, MAP - VH));
     syncHud(true);
-    show("title"); hide("pause"); hide("dead"); hide("pick"); hide("campPick"); hide("adBreak");
-    const rb = $("reviveBtn");
-    if (rb) rb.hidden = false;
+    show("title"); hide("pause"); hide("dead"); hide("pick"); hide("campPick"); hide("adBreak"); hide("powerAd"); hide("adWait");
+    setReviveOffer(true);
     cg.lastPct = 0;
     cg.clearContext();
   }
@@ -637,20 +582,76 @@
     });
   }
 
+  function setPickCopy() {
+    const bonus = S.bonusLeft > 0;
+    $("pickTitle").textContent = bonus ? ("Bonus power · " + S.bonusLeft + " left") : "Choose a power";
+    $("pickBlurb").textContent = bonus
+      ? "Three extra picks from the ad. Choose one, then the next."
+      : "Weapons and passives. Camp upgrades every 3 waves, only while the fire lives.";
+  }
+
   function offerPowers() {
     const pool = shuffle(eligiblePowers());
     if (pool.length === 0) {
+      if (S.bonusLeft > 0) { S.bonusLeft = 0; resumeBonus(); return; }
       if (shouldOfferCamp()) offerCamp();
-    else { S.state = "play"; S.waveRest = 2.2; cg.gameplayStart(); }
+      else { S.state = "play"; S.waveRest = 2.2; cg.gameplayStart(); }
       return;
     }
     S.picks = pool.slice(0, 3);
     while (S.picks.length < 3) S.picks.push(S.picks[0] || "vit");
     S.state = "pick";
+    setPickCopy();
     fillCards("cards", S.picks, (def) => def.kind === "wep" ? "WEAPON" : "PASSIVE", choose);
     show("pick");
     audio.tone(360, 0.1, "square", 0.05);
     audio.tone(520, 0.14, "triangle", 0.05);
+  }
+
+  function resumeBonus(name) {
+    hide("pick"); hide("powerAd"); hide("adWait");
+    S.bonusLeft = 0;
+    S.state = "play";
+    if (name) say(name.toUpperCase(), 1.6);
+    else say("POWERED UP", 1.6);
+    audio.tone(480, 0.1, "square", 0.07);
+    syncHud(true);
+    cg.gameplayStart();
+  }
+
+  function beginBonusPicks() {
+    hide("powerAd"); hide("adWait"); hide("adBreak");
+    S.bonusLeft = 3;
+    S.powerAdAt = S.t + 110 + Math.random() * 40;
+    offerPowers();
+  }
+
+  function openPowerAd() {
+    if (S.state !== "play" || cg.video || cg.blocked) return;
+    if (eligiblePowers().length === 0) {
+      S.powerAdAt = S.t + 80;
+      return;
+    }
+    cg.gameplayStop();
+    S.state = "powerAd";
+    show("powerAd");
+    setPowerAdButtons();
+    cg.context();
+  }
+
+  function skipPowerAd() {
+    if (S.state !== "powerAd" || cg.video) return;
+    hide("powerAd");
+    S.powerAdAt = S.t + 90 + Math.random() * 40;
+    S.state = "play";
+    cg.gameplayStart();
+  }
+
+  function setPowerAdButtons() {
+    const watch = $("powerAdWatch");
+    if (!watch) return;
+    watch.hidden = !!cg.blocked;
+    watch.disabled = !!cg.blocked;
   }
 
   function offerCamp() {
@@ -676,7 +677,7 @@
   }
 
   function resumeWave(name) {
-    hide("pick"); hide("campPick");
+    hide("pick"); hide("campPick"); hide("powerAd"); hide("adWait");
     S.state = "play";
     S.waveRest = 2.4;
     say(name.toUpperCase(), 1.6);
@@ -702,6 +703,13 @@
       }
     }
     hide("pick");
+    if (S.bonusLeft > 0) {
+      S.bonusLeft--;
+      say(def.name.toUpperCase(), 1.1);
+      if (S.bonusLeft > 0) offerPowers();
+      else resumeBonus(def.name);
+      return;
+    }
     if (shouldOfferCamp()) {
       offerCamp();
       if (S.state === "campPick") say(def.name.toUpperCase(), 1.2);
@@ -764,16 +772,39 @@
     syncHudBars();
   }
 
+  function setReviveOffer(available) {
+    const rb = $("reviveBtn");
+    const hint = $("reviveHint");
+    const can = available && !S.revived && !cg.blocked;
+    if (rb) {
+      rb.hidden = !can;
+      rb.disabled = !can;
+    }
+    if (hint) {
+      if (cg.blocked) hint.textContent = "Ads are blocked. Restart to try again.";
+      else if (S.revived) hint.textContent = "Respawn already used this run. Restart without an ad.";
+      else hint.textContent = isTouch() ? "Respawn is optional." : "Respawn is optional. R also restarts.";
+    }
+  }
+
   function die(reason) {
     cg.gameplayStop();
     S.state = "dead";
+    hide("powerAd"); hide("pick"); hide("campPick"); hide("pause");
     $("deadTitle").textContent = reason;
     $("deadStats").textContent = "Wave " + S.wave + "   ·   " + S.kills + " kills   ·   " + Math.floor(S.t) + "s";
     show("dead");
-    const rb = $("reviveBtn");
-    if (rb) rb.hidden = false;
+    setReviveOffer(true);
     cg.context();
     audio.tone(80, 0.45, "triangle", 0.1, 36);
+  }
+
+  function restartRun() {
+    if (cg.video) return;
+    cg.gameplayStop();
+    fresh(); hide("title"); hide("dead"); hide("powerAd"); S.state = "play";
+    cg.gameplayStart();
+    cg.context();
   }
 
   function snuffFire() {
@@ -1192,9 +1223,13 @@
         }
       }
     } else if (S.zombies.length === 0) {
-      S.state = "break";
       cg.gameplayStop();
-      cg.midgame(() => offerPowers());
+      offerPowers();
+      return;
+    }
+
+    if (S.waveRest <= 0 && S.wave >= 2 && S.t >= S.powerAdAt && (S.incoming > 0 || S.zombies.length > 0)) {
+      openPowerAd();
       return;
     }
 
@@ -1203,8 +1238,10 @@
     if (KEY.moveD || KEY["arrowdown"]) iy += 1;
     if (KEY.moveL || KEY["arrowleft"]) ix -= 1;
     if (KEY.moveR || KEY["arrowright"]) ix += 1;
-    const len = Math.hypot(ix, iy) || 1;
-    const moving = ix || iy;
+    if (stick.id != null) { ix += stick.nx; iy += stick.ny; }
+    const mag = Math.hypot(ix, iy);
+    const moving = mag > 0.18;
+    const len = mag || 1;
     if (moving) {
       p.facing = Math.atan2(iy, ix);
       if (ix) p.flip = ix < 0;
@@ -2051,34 +2088,29 @@
     $("muteTag").style.display = audio.silenced() ? "block" : "none";
   }
 
+  function addChip(box, id, lv, camp) {
+    const span = document.createElement("span");
+    span.className = camp ? "chip camp" : "chip";
+    const name = POWERS[id].name.toUpperCase() + " " + lv;
+    span.title = name;
+    span.appendChild(makeIcon(id, 16));
+    span.appendChild(document.createTextNode(isTouch() ? String(lv) : name));
+    box.appendChild(span);
+  }
+
   function syncHudChips() {
-    const sig = S.loadout.map((w) => w.id + w.lv).join(",") + "|" + Object.keys(S.pas).map((id) => id + S.pas[id]).join(",") + "|" + Object.keys(S.camp).map((id) => id + S.camp[id]).join(",");
+    const compact = isTouch() ? "t" : "k";
+    const sig = compact + "|" + S.loadout.map((w) => w.id + w.lv).join(",") + "|" + Object.keys(S.pas).map((id) => id + S.pas[id]).join(",") + "|" + Object.keys(S.camp).map((id) => id + S.camp[id]).join(",");
     if (sig === S.hudSig) return;
     S.hudSig = sig;
     $("chips").innerHTML = "";
-    S.loadout.forEach((w) => {
-      const span = document.createElement("span");
-      span.className = "chip";
-      span.appendChild(makeIcon(w.id, 16));
-      span.appendChild(document.createTextNode(POWERS[w.id].name.toUpperCase() + " " + w.lv));
-      $("chips").appendChild(span);
-    });
+    S.loadout.forEach((w) => addChip($("chips"), w.id, w.lv, false));
     Object.keys(S.pas).forEach((id) => {
-      if (!S.pas[id]) return;
-      const span = document.createElement("span");
-      span.className = "chip";
-      span.appendChild(makeIcon(id, 16));
-      span.appendChild(document.createTextNode(POWERS[id].name.toUpperCase() + " " + S.pas[id]));
-      $("chips").appendChild(span);
+      if (S.pas[id]) addChip($("chips"), id, S.pas[id], false);
     });
     $("campChips").innerHTML = "";
     Object.keys(S.camp).forEach((id) => {
-      if (!S.camp[id]) return;
-      const span = document.createElement("span");
-      span.className = "chip camp";
-      span.appendChild(makeIcon(id, 16));
-      span.appendChild(document.createTextNode(POWERS[id].name.toUpperCase() + " " + S.camp[id]));
-      $("campChips").appendChild(span);
+      if (S.camp[id]) addChip($("campChips"), id, S.camp[id], true);
     });
   }
 
@@ -2106,14 +2138,67 @@
     } else goFullscreen();
   }
 
+  function isTouch() {
+    return matchMedia("(pointer: coarse)").matches
+      || (navigator.maxTouchPoints > 0 && matchMedia("(hover: none)").matches);
+  }
+
+  function resetStick() {
+    stick.id = null;
+    stick.nx = 0;
+    stick.ny = 0;
+    const knob = $("stickKnob");
+    if (knob) knob.style.transform = "";
+  }
+
+  function syncChrome() {
+    const touch = isTouch();
+    const playing = !!(S && S.state === "play" && !cg.video);
+    document.body.classList.toggle("is-touch", touch);
+    document.body.classList.toggle("playing", playing);
+    document.body.classList.toggle("portrait", VH > VW);
+    document.body.classList.toggle("landscape", VW >= VH);
+    const pad = $("touch");
+    if (pad) pad.setAttribute("aria-hidden", touch && playing ? "false" : "true");
+    if (!playing) resetStick();
+    const hint = $("controlsHint");
+    if (hint) {
+      const mode = touch ? "touch" : "desk";
+      if (hint.dataset.mode !== mode) {
+        hint.dataset.mode = mode;
+        hint.innerHTML = touch
+          ? "<span class=\"k\">TAP</span> to start · joystick move · <span class=\"k\">DASH</span>"
+          : "<span class=\"k\">ENTER</span> start · <span class=\"k\" id=\"moveKeys\">WASD</span> move · <span class=\"k\">SPACE</span> dash · <span class=\"k\">P</span> pause · <span class=\"k\">F</span> fullscreen";
+        if (!touch) labelMoveKeys();
+      }
+    }
+  }
+
+  function tryDash() {
+    if (!S || S.state !== "play") return;
+    const st = stats();
+    if (S.player.dashCd > 0) return;
+    S.player.dash = st.dashT;
+    S.player.dashCd = st.dashCd;
+    S.player.ifr = st.dashT;
+    S.player.vx += Math.cos(S.player.facing) * 260;
+    S.player.vy += Math.sin(S.player.facing) * 260;
+    audio.tone(210, 0.08, "triangle", 0.05);
+  }
+
   function fitScreen() {
-    cg.layoutRails();
     const stage = $("stage");
-    const vv = window.visualViewport;
-    const w = (stage && stage.clientWidth) || (vv && vv.width) || window.innerWidth;
-    const h = (stage && stage.clientHeight) || (vv && vv.height) || window.innerHeight;
-    VW = Math.max(640, w | 0);
-    VH = Math.max(360, h | 0);
+    const w = Math.max(1, (stage && stage.clientWidth) || window.innerWidth);
+    const h = Math.max(1, (stage && stage.clientHeight) || window.innerHeight);
+    if (h > w) {
+      VW = 1080;
+      VH = Math.round(1080 * h / w);
+    } else {
+      VH = 1080;
+      VW = Math.round(1080 * w / h);
+    }
+    VW = clamp(VW | 0, 640, 2560);
+    VH = clamp(VH | 0, 360, 2560);
     CV.width = VW;
     CV.height = VH;
     CTX.imageSmoothingEnabled = false;
@@ -2122,6 +2207,8 @@
       S.camX = clamp(S.player.x - VW / 2, 0, Math.max(0, MAP - VW));
       S.camY = clamp(S.player.y - VH / 2, 0, Math.max(0, MAP - VH));
     }
+    syncChrome();
+    if (S) syncHud(true);
   }
 
   function startGame() {
@@ -2129,8 +2216,9 @@
     hide("title");
     S.state = "play";
     say("KEEP THE FIRE", 1.8);
-    goFullscreen();
+    if (!isTouch()) goFullscreen();
     fitScreen();
+    syncChrome();
     cg.gameplayStart();
     cg.context();
   }
@@ -2168,18 +2256,14 @@
     const k = e.code;
     if (k === "Enter") startGame();
     if (k === "KeyF") { e.preventDefault(); toggleFullscreen(); }
-    if (k === "KeyP" && S.state === "play") { S.state = "pause"; show("pause"); cg.gameplayStop(); }
-    else if (k === "KeyP" && S.state === "pause") { S.state = "play"; hide("pause"); cg.gameplayStart(); }
+    if (k === "KeyP" && S.state === "play" && !cg.video) { S.state = "pause"; show("pause"); cg.gameplayStop(); syncChrome(); }
+    else if (k === "KeyP" && S.state === "pause") { S.state = "play"; hide("pause"); cg.gameplayStart(); syncChrome(); }
     if (k === "KeyM") {
       if (!audio.sdkMute) audio.userMuted = !audio.userMuted;
       syncHudBars();
     }
-    if (k === "KeyR") {
-      cg.gameplayStop();
-      fresh(); hide("title"); hide("dead"); S.state = "play";
-      cg.gameplayStart();
-      cg.context();
-    }
+    if (k === "KeyR") restartRun();
+    if (k === "Escape" && S.state === "powerAd") skipPowerAd();
     if (S.state === "pick") {
       if (k === "Digit1" || k === "Numpad1") choose(0);
       if (k === "Digit2" || k === "Numpad2") choose(1);
@@ -2192,15 +2276,7 @@
     }
     if (k === "Space") {
       e.preventDefault();
-      if (S.state === "play") {
-        const st = stats();
-        if (S.player.dashCd <= 0) {
-          S.player.dash = st.dashT; S.player.dashCd = st.dashCd; S.player.ifr = st.dashT;
-          S.player.vx += Math.cos(S.player.facing) * 260;
-          S.player.vy += Math.sin(S.player.facing) * 260;
-          audio.tone(210, 0.08, "triangle", 0.05);
-        }
-      }
+      tryDash();
     }
   });
   window.addEventListener("keyup", (e) => {
@@ -2212,14 +2288,83 @@
   });
   $("title").addEventListener("click", () => { audio.unlock(); startGame(); });
   const reviveBtn = $("reviveBtn");
+  const restartBtn = $("restartBtn");
   const adBreakSkip = $("adBreakSkip");
+  const powerAdWatch = $("powerAdWatch");
+  const powerAdSkip = $("powerAdSkip");
+  const pauseContinue = $("pauseContinue");
+  const pauseRestart = $("pauseRestart");
+  if (pauseContinue) pauseContinue.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (S.state !== "pause") return;
+    S.state = "play"; hide("pause"); cg.gameplayStart(); syncChrome();
+  });
+  if (pauseRestart) pauseRestart.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (S.state === "pause") restartRun();
+  });
+  (function bindStick() {
+    const base = $("stickBase");
+    const knob = $("stickKnob");
+    const dash = $("dashBtn");
+    if (!base || !knob) return;
+    const setFrom = (clientX, clientY) => {
+      const r = base.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      let dx = clientX - cx, dy = clientY - cy;
+      const max = r.width * 0.36;
+      const m = Math.hypot(dx, dy) || 1;
+      if (m > max) { dx *= max / m; dy *= max / m; }
+      knob.style.transform = "translate(" + dx + "px," + dy + "px)";
+      stick.nx = dx / max;
+      stick.ny = dy / max;
+    };
+    base.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation(); audio.unlock();
+      stick.id = e.pointerId;
+      try { base.setPointerCapture(e.pointerId); } catch (err) {}
+      setFrom(e.clientX, e.clientY);
+    });
+    base.addEventListener("pointermove", (e) => {
+      if (stick.id !== e.pointerId) return;
+      e.preventDefault();
+      setFrom(e.clientX, e.clientY);
+    });
+    const end = (e) => { if (stick.id === e.pointerId) resetStick(); };
+    base.addEventListener("pointerup", end);
+    base.addEventListener("pointercancel", end);
+    if (dash) dash.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation(); audio.unlock(); tryDash();
+    });
+  })();
   if (adBreakSkip) adBreakSkip.addEventListener("click", (e) => { e.stopPropagation(); cg.closeDemo(); });
+  if (restartBtn) restartBtn.addEventListener("click", (e) => { e.stopPropagation(); if (S.state === "dead") restartRun(); });
+  if (powerAdSkip) powerAdSkip.addEventListener("click", (e) => { e.stopPropagation(); skipPowerAd(); });
+  if (powerAdWatch) {
+    powerAdWatch.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (S.state !== "powerAd" || cg.video || cg.blocked) return;
+      hide("powerAd");
+      cg.rewarded(() => {
+        beginBonusPicks();
+        say("THREE EXTRA POWERS", 1.6);
+      }, (reason) => {
+        if (S.state !== "powerAd") return;
+        show("powerAd");
+        setPowerAdButtons();
+        if (reason === "adblock") say("ADS BLOCKED", 1.6);
+        else if (reason === "adCooldown") say("TRY THE AD AGAIN LATER", 1.6);
+        else say("NO AD AVAILABLE", 1.6);
+      });
+    });
+  }
   if (reviveBtn) {
     reviveBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (S.state !== "dead") return;
+      if (S.state !== "dead" || cg.video || S.revived || cg.blocked) return;
       reviveBtn.hidden = true;
       cg.rewarded(() => {
+        S.revived = true;
         S.player.hp = Math.max(40, S.player.max * 0.45);
         S.player.ifr = 1.6;
         S.player.flash = 0.4;
@@ -2229,9 +2374,11 @@
         syncHudBars();
         cg.gameplayStart();
         cg.context();
-      }, () => {
-        if (S.state === "dead") reviveBtn.hidden = false;
-        say("NO AD AVAILABLE", 1.4);
+      }, (reason) => {
+        if (S.state === "dead") setReviveOffer(true);
+        if (reason === "adblock") say("ADS BLOCKED", 1.6);
+        else if (reason === "adCooldown") say("TRY THE AD AGAIN LATER", 1.6);
+        else say("NO AD AVAILABLE", 1.6);
       });
     });
   }
@@ -2241,11 +2388,13 @@
     let dt = Math.min(0.033, (now - last) / 1000);
     last = now;
     if (S.hitstop > 0) { S.hitstop -= dt; dt *= 0.18; }
+    syncChrome();
     update(dt);
     draw();
     requestAnimationFrame(loop);
   }
   window.addEventListener("resize", fitScreen);
+  window.addEventListener("orientationchange", () => setTimeout(fitScreen, 80));
   window.addEventListener("fullscreenchange", fitScreen);
   window.addEventListener("webkitfullscreenchange", fitScreen);
   if (window.visualViewport) window.visualViewport.addEventListener("resize", fitScreen);
@@ -2262,6 +2411,11 @@
     } catch (e) {
       cg.ready = false;
     }
+    try {
+      if (cg.ok() && sdk.ad && sdk.ad.hasAdblock) cg.blocked = !!(await sdk.ad.hasAdblock());
+    } catch (e) {
+      cg.blocked = false;
+    }
     cg.call((s) => s.game.loadingStart());
     fitScreen();
     fresh();
@@ -2270,8 +2424,6 @@
       cg.applySettings(s.game.settings);
       if (s.game.addSettingsChangeListener) s.game.addSettingsChangeListener((st) => cg.applySettings(st));
     });
-    cg.layoutRails();
-    requestAnimationFrame(() => setTimeout(() => cg.requestBanners(), 160));
     requestAnimationFrame(loop);
   }
   boot();
