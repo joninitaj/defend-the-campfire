@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Defend the Campfire</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="hold.css">
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+</head>
+<body>
+<div id="wrap">
+  <aside id="adLeft" class="ad-rail" aria-hidden="true"><div id="adLeftInner"></div></aside>
+  <div id="stage">
+  <canvas id="g" width="1920" height="1080"></canvas>
+  <div id="ui">
+    <div id="hud">
+      <div class="col left">
+        <div class="label">Survivor</div>
+        <div class="bar hp"><i id="hpFill"></i></div>
+        <div class="label" id="fireLabel">Campfire</div>
+        <div class="bar fire" id="fireBar"><i id="fireFill"></i></div>
+        <div class="chips camp-chips" id="campChips"></div>
+      </div>
+      <div class="col right">
+        <div class="label">Wave <span class="val" id="waveVal">0</span> · Kills <span class="val" id="killVal">0</span></div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+    <div id="banner"></div>
+    <div class="muted" id="muteTag">MUTED</div>
+    <div id="title" class="overlay show">
+      <h1>DEFEND THE CAMPFIRE</h1>
+      <p>Keep the fire if you can. If it dies, you still fight — but camp upgrades stop.</p>
+      <p class="hint"><span class="k">ENTER</span> start · <span class="k" id="moveKeys">WASD</span> move · <span class="k">SPACE</span> dash · <span class="k">P</span> pause · <span class="k">F</span> fullscreen</p>
+    </div>
+    <div id="pause" class="overlay">
+      <h2>Paused</h2>
+      <p class="hint"><span class="k">P</span> continue · <span class="k">R</span> restart</p>
+    </div>
+    <div id="dead" class="overlay">
+      <h2 id="deadTitle">You were eaten</h2>
+      <p id="deadStats"></p>
+      <button type="button" id="reviveBtn" class="adBtn">Watch an ad to respawn</button>
+      <p class="hint"><span class="k">R</span> restart without an ad</p>
+    </div>
+    <div id="adBreak" class="overlay">
+      <h2 id="adBreakTitle">Advertisement</h2>
+      <p id="adBreakKind">Wave break</p>
+      <p class="hint">CrazyGames preview. A real video ad plays on their site.</p>
+      <button type="button" id="adBreakSkip" class="adBtn">Continue</button>
+    </div>
+    <div id="pick" class="overlay">
+      <h2>Choose a power</h2>
+      <p>Weapons and passives. Camp upgrades every 3 waves, only while the fire lives.</p>
+      <div id="cards"></div>
+      <p class="hint">Click a card or press <span class="k">1</span> <span class="k">2</span> <span class="k">3</span></p>
+    </div>
+    <div id="campPick" class="overlay">
+      <h2>Camp upgrades</h2>
+      <p>Fortify the fire. Offered every 3 waves, only while it still burns.</p>
+      <div id="campCards"></div>
+      <p class="hint">Click a card or press <span class="k">1</span> <span class="k">2</span> <span class="k">3</span></p>
+    </div>
+  </div>
+  </div>
+  <aside id="adRight" class="ad-rail" aria-hidden="true"><div id="adRightInner"></div></aside>
+</div>
+<script src="hold.js"></script>
+</body>
+</html>

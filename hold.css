@@ -1,0 +1,116 @@
+html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #081008; overflow: hidden;
+    font-family: "Courier New", Courier, monospace; color: #e8d8b0;
+    user-select: none;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh;
+    width: 100dvw; height: 100dvh;
+    display: flex; background: #000;
+  }
+  .ad-rail {
+    display: none; flex: none;
+    width: 160px; height: 100%;
+    background: #000;
+    align-items: center; justify-content: center;
+    pointer-events: auto;
+  }
+  .ad-rail.show { display: flex; }
+  .ad-rail.wide { width: 300px; }
+  .ad-rail > div {
+    width: 160px; height: 600px; overflow: hidden;
+    background: #12100c; border: 1px solid #3a3020;
+    color: #6a5a40; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .ad-rail.wide > div { width: 300px; height: 600px; }
+  .ad-rail > div:empty::after { content: "Ad"; }
+  #stage {
+    position: relative; flex: 1; min-width: 0; height: 100%;
+    background: #081008;
+  }
+  canvas#g, #g {
+    display: block; position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    background: #081008; cursor: default;
+  }
+  #ui { position: absolute; inset: 0; pointer-events: none; }
+  #hud {
+    position: absolute; left: 18px; right: 18px; top: 16px;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  }
+  .col { display: flex; flex-direction: column; gap: 6px; min-width: 260px; }
+  .col.left, .col.right {
+    background: #16120e; border: 2px solid #3a3020; padding: 10px 12px;
+  }
+  .col.right { align-items: flex-end; text-align: right; }
+  .label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #a89880; }
+  .val { font-size: 20px; letter-spacing: 0.06em; color: #fff3c8; }
+  .bar {
+    width: 260px; height: 8px; background: #0c0b09;
+    border: 2px solid #3a3020; overflow: hidden;
+  }
+  .bar > i { display: block; height: 100%; width: 0%; }
+  .hp > i { background: #c23a2a; }
+  .fire > i { background: #ffb020; }
+  .fire.out > i { background: #6a4a30; }
+  .label.warn { color: #c23a2a; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 460px; justify-content: flex-end; }
+  .camp-chips { justify-content: flex-start; max-width: 260px; margin-top: 4px; }
+  .chip {
+    font-size: 11px; padding: 3px 7px 3px 4px; border: 2px solid #3a3020;
+    background: #0c0b09; color: #ffe27a; letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip.camp { color: #ffb020; }
+  .chip canvas {
+    width: 18px; height: 18px; image-rendering: pixelated; image-rendering: crisp-edges;
+    display: block; flex: none; position: static;
+  }
+  #banner {
+    position: absolute; left: 50%; top: 92px; transform: translateX(-50%);
+    font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #ffe27a; opacity: 0; transition: opacity 0.2s;
+  }
+  .overlay {
+    position: absolute; inset: 0; display: none; pointer-events: auto;
+    background: rgba(12, 11, 9, 0.84); align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px;
+  }
+  .overlay.show { display: flex; }
+  .overlay h1 { margin: 0; font-size: 42px; letter-spacing: 0.14em; color: #ffb020; font-weight: 700; }
+  .overlay h2 { margin: 0; font-size: 26px; letter-spacing: 0.1em; color: #fff3c8; }
+  .overlay p { margin: 0; color: #a89880; font-size: 15px; line-height: 1.5; text-align: center; max-width: 640px; }
+  .hint { font-size: 13px; color: #c8b890; letter-spacing: 0.08em; }
+  .k { color: #ffb020; }
+  #cards, #campCards {
+    display: grid; grid-template-columns: repeat(3, minmax(200px, 240px)); gap: 12px;
+    pointer-events: auto; margin-top: 6px;
+  }
+  .card {
+    background: #16120e; border: 2px solid #3a3020; padding: 14px 14px 16px;
+    text-align: left; cursor: pointer; color: #e8d8b0;
+  }
+  .card:hover, .card:focus { border-color: #ffb020; background: #1e1810; outline: none; }
+  .card .key { font-size: 11px; color: #ffb020; letter-spacing: 0.16em; }
+  .card h3 { margin: 6px 0 4px; font-size: 16px; color: #fff3c8; letter-spacing: 0.04em; }
+  .card .lvl { font-size: 11px; color: #7a9a62; letter-spacing: 0.1em; }
+  .card p { margin: 6px 0 0; font-size: 12px; color: #a89880; text-align: left; }
+  .ico {
+    width: 52px; height: 52px; margin: 8px 0 4px;
+    border: 2px solid #3a3020; background: #0c0b09;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    display: block; position: static;
+  }
+  .muted { position: absolute; right: 18px; bottom: 16px; font-size: 12px; letter-spacing: 0.14em; color: #c23a2a; display: none; }
+  .adBtn {
+    pointer-events: auto; cursor: pointer; margin-top: 6px;
+    background: #16120e; border: 2px solid #ffb020; color: #fff3c8;
+    font-family: inherit; font-size: 14px; letter-spacing: 0.08em;
+    padding: 10px 16px;
+  }
+  .adBtn:hover, .adBtn:focus { background: #1e1810; outline: none; }
+  .adBtn[hidden] { display: none; }
